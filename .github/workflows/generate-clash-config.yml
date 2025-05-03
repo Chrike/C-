@@ -25,7 +25,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20' # Specify desired Node.js version (LTS recommended)
-          cache: 'npm'      # Cache npm dependencies
 
       - name: Install dependencies
         run: npm install js-yaml # Install only the required dependency
