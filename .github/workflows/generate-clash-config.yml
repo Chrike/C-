@@ -2,33 +2,25 @@ name: Generate Clash Config and Push to Gist
 
 on:
   schedule:
-    # Run daily at 00:00 UTC (adjust cron as needed)
     - cron: '0 0 * * *'
-  workflow_dispatch: # Allows manual triggering
+  workflow_dispatch:
 
 jobs:
   generate_and_push_gist:
     runs-on: ubuntu-latest
-    # No longer needs contents: write permission for the repo
-    # permissions:
-    #   contents: read # Only needs read to checkout
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-        # No need for persist-credentials anymore
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-          # Cache can be removed if you don't have package-lock.json
-          # cache: 'npm'
+          # cache: 'npm' # Remove if no package-lock.json
 
       - name: Install dependencies
-        # If you added package.json, use 'npm install'
-        # Otherwise, use 'npm install js-yaml'
-        run: npm install js-yaml # Or 'npm install' if you have package.json
+        run: npm install js-yaml # Or 'npm install'
 
       - name: Create temporary directory for proxies
         run: mkdir -p temp_data
@@ -56,24 +48,40 @@ jobs:
              exit 1
           fi
           echo "clash_config.yaml generated."
-      # --- 新增检查步骤 ---
+
       - name: Check generated file existence and content
         run: |
-          ls -l clash_config.yaml # 打印文件信息
-          if [ ! -s clash_config.yaml ]; then # -s 检查文件是否存在且不为空
+          ls -l clash_config.yaml # Print file info
+          if [ ! -s clash_config.yaml ]; then # -s checks file exists and is not empty
             echo "Error: clash_config.yaml is missing or empty!"
             exit 1
           fi
           echo "clash_config.yaml exists and is not empty."
-      # --- New Step: Update Gist ---
+          echo "--- Start of clash_config.yaml head ---"
+          head -n 10 clash_config.yaml # Print first 10 lines
+          echo "--- End of clash_config.yaml head ---"
+
+      # --- 新增：列出 Gist 文件用于调试 ---
+      - name: List files in Gist (Debug)
+        env:
+          GITHUB_TOKEN: ${{ secrets.GIST_PAT }}
+          GIST_ID: ${{ secrets.GIST_ID }}
+        run: |
+          if [ -z "$GITHUB_TOKEN" ]; then echo "GIST_PAT is not set"; exit 1; fi
+          if [ -z "$GIST_ID" ]; then echo "GIST_ID is not set"; exit 1; fi
+          echo "Attempting to view Gist ID: $GIST_ID to check access and files..."
+          # The --files flag lists only the filenames
+          gh gist view "$GIST_ID" --files || echo "Failed to list files. Check GIST_ID and GIST_PAT permissions."
+
+      # --- 修改：为 gh gist edit 添加调试输出 ---
       - name: Update Gist with generated config
         env:
-          # Use the PAT secret for authentication with gh cli
           GITHUB_TOKEN: ${{ secrets.GIST_PAT }}
-          # Get the Gist ID from secrets
           GIST_ID: ${{ secrets.GIST_ID }}
-          # Get the target filename in Gist from secrets, fallback to clash_config.yaml
           GIST_FILENAME: ${{ secrets.GIST_FILENAME || 'clash_config.yaml' }}
+          # Enable maximum debug output for gh cli http requests
+          # Alternatives: DEBUG=api or DEBUG=http
+          DEBUG: '*'
         run: |
           if [ -z "$GITHUB_TOKEN" ]; then
             echo "Error: GIST_PAT secret is not set."
@@ -84,12 +92,20 @@ jobs:
             exit 1
           fi
           echo "Updating Gist $GIST_ID with file $GIST_FILENAME..."
+          # Execute the command with debug logging enabled via DEBUG env var
           gh gist edit "$GIST_ID" --filename "$GIST_FILENAME" < clash_config.yaml
-          echo "Gist update command finished."
+          # Check exit code immediately after
+          gh_exit_code=$?
+          if [ $gh_exit_code -ne 0 ]; then
+            echo "Error: gh gist edit command failed with exit code $gh_exit_code"
+            exit $gh_exit_code
+          fi
+          echo "Gist update command finished successfully."
 
       - name: Clean up temporary files
         if: always()
         run: |
           echo "Cleaning up temporary directory..."
           rm -rf temp_data
+          # rm -f clash_config.yaml # Keep the generated file for potential artifact upload if needed
           echo "Cleanup finished."
