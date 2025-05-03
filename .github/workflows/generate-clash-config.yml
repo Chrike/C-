@@ -1,83 +1,86 @@
-name: Generate Clash Config
+name: Generate Clash Config and Push to Gist
 
 on:
   schedule:
     # Run daily at 00:00 UTC (adjust cron as needed)
-    # Example: Every 6 hours: '0 */6 * * *'
-    # Example: Every day at 2 AM UTC: '0 2 * * *'
     - cron: '0 0 * * *'
-  workflow_dispatch: # Allows manual triggering from the Actions tab
+  workflow_dispatch: # Allows manual triggering
 
 jobs:
-  generate_config:
+  generate_and_push_gist:
     runs-on: ubuntu-latest
-    permissions:
-      contents: write # Grant permission to write to the repository (for committing changes)
+    # No longer needs contents: write permission for the repo
+    # permissions:
+    #   contents: read # Only needs read to checkout
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-        with:
-          # Persist credentials for commit step if using default GITHUB_TOKEN
-           persist-credentials: true
+        # No need for persist-credentials anymore
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20' # Specify desired Node.js version (LTS recommended)
+          node-version: '20'
+          # Cache can be removed if you don't have package-lock.json
+          # cache: 'npm'
 
       - name: Install dependencies
-        run: npm install js-yaml # Install only the required dependency
+        # If you added package.json, use 'npm install'
+        # Otherwise, use 'npm install js-yaml'
+        run: npm install js-yaml # Or 'npm install' if you have package.json
 
       - name: Create temporary directory for proxies
-        run: mkdir -p temp_data # Use a more descriptive name
+        run: mkdir -p temp_data
 
       - name: Fetch latest proxy list
-        id: fetch_proxies # Give this step an ID to potentially check its outcome
+        id: fetch_proxies
         run: |
           echo "Fetching proxy list..."
           curl -f -L -S -s -o temp_data/proxies.yaml 'https://gist.githubusercontent.com/Chrike/9a70063363aca87a35fbad9ffb9fdcfd/raw/all.yaml'
           echo "Proxy list download command finished."
-          # Optional: Check if the file was downloaded and is not empty
           if [ ! -s temp_data/proxies.yaml ]; then
-            echo "Error: Downloaded proxy list is empty or download failed."
-            # Decide how to handle: exit 1 (fail workflow), or proceed with empty list
-            # exit 1
-            echo "Proceeding with potentially empty proxy list..." # Or handle as needed
+            echo "Warning: Downloaded proxy list is empty or download failed. Proceeding..."
           else
             echo "Proxy list downloaded successfully."
-            # Optional: Log first few lines to check format
-            # head -n 5 temp_data/proxies.yaml
           fi
-        # Consider adding retry logic or alternative URLs if the Gist is unreliable
 
       - name: Generate Clash configuration
-        id: generate_config # Give this step an ID
+        id: generate_config
         run: |
           echo "Running Node.js script to generate config..."
           node generate-clash-config.js temp_data/proxies.yaml clash_config.yaml
           echo "Node.js script finished."
-          # Optional: Check if the output file was created
           if [ ! -f clash_config.yaml ]; then
              echo "Error: clash_config.yaml was not created by the script."
              exit 1
           fi
           echo "clash_config.yaml generated."
 
-      - name: Commit and push changes
-        uses: stefanzweifel/git-auto-commit-action@v5
-        with:
-          commit_message: "Update Clash configuration [skip ci]" # Commit message, [skip ci] prevents triggering other actions
-          file_pattern: clash_config.yaml # Only commit changes to this specific file
-          commit_user_name: GitHub Actions Bot # Name for the commit author
-          commit_user_email: actions@github.com # Email for the commit author
-          commit_author: GitHub Actions Bot <actions@github.com> # Format for author info
-          # Optional: Add GPG signing if needed
-          # skip_fetch: true # Optimization if repo is already up-to-date (usually safe here)
-          # skip_dirty_check: false # Ensure only specified files are committed
+      # --- New Step: Update Gist ---
+      - name: Update Gist with generated config
+        env:
+          # Use the PAT secret for authentication with gh cli
+          GITHUB_TOKEN: ${{ secrets.GIST_PAT }}
+          # Get the Gist ID from secrets
+          GIST_ID: ${{ secrets.GIST_ID }}
+          # Get the target filename in Gist from secrets, fallback to clash_config.yaml
+          GIST_FILENAME: ${{ secrets.GIST_FILENAME || 'clash_config.yaml' }}
+        run: |
+          if [ -z "$GITHUB_TOKEN" ]; then
+            echo "Error: GIST_PAT secret is not set."
+            exit 1
+          fi
+          if [ -z "$GIST_ID" ]; then
+            echo "Error: GIST_ID secret is not set."
+            exit 1
+          fi
+          echo "Updating Gist $GIST_ID with file $GIST_FILENAME..."
+          gh gist edit "$GIST_ID" --filename "$GIST_FILENAME" < clash_config.yaml
+          echo "Gist update command finished."
 
       - name: Clean up temporary files
-        if: always() # Ensure cleanup runs even if previous steps fail
+        if: always()
         run: |
           echo "Cleaning up temporary directory..."
           rm -rf temp_data
