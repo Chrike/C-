@@ -66,7 +66,7 @@ jobs:
 
       # --- 新增步骤：更新 Gist ---
       - name: Update Gist with generated config
-        uses: exuanbo/actions-sync-gist@v1 # 使用更新 Gist 的 Action
+        uses: exuanbo/actions-sync-gist@v1
         if: success() && steps.generate_config.outcome == 'success' # 确保文件生成成功才执行
         with:
           token: ${{ secrets.GIST_PAT }}       # 使用你创建的 PAT Secret
