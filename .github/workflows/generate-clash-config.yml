@@ -56,7 +56,15 @@ jobs:
              exit 1
           fi
           echo "clash_config.yaml generated."
-
+      # --- 新增检查步骤 ---
+      - name: Check generated file existence and content
+        run: |
+          ls -l clash_config.yaml # 打印文件信息
+          if [ ! -s clash_config.yaml ]; then # -s 检查文件是否存在且不为空
+            echo "Error: clash_config.yaml is missing or empty!"
+            exit 1
+          fi
+          echo "clash_config.yaml exists and is not empty."
       # --- New Step: Update Gist ---
       - name: Update Gist with generated config
         env:
