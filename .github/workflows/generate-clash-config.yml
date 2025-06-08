@@ -1,153 +1,153 @@
-name: Generate Clash Config and Update Gist
+# name: Generate Clash Config and Update Gist
 
-on:
-  schedule:
-    # 对应 北京时间 11:15 (UTC 03:15)
-    - cron: '15 3 * * *'
-    # 对应 北京时间 22:15 (UTC 14:15)
-    - cron: '15 14 * * *'
-  workflow_dispatch: {} # 允许手动触发
+# on:
+#   schedule:
+#     # 对应 北京时间 11:15 (UTC 03:15)
+#     - cron: '15 3 * * *'
+#     # 对应 北京时间 22:15 (UTC 14:15)
+#     - cron: '15 14 * * *'
+#   workflow_dispatch: {} # 允许手动触发
   
 
-jobs:
-  generate_and_update_gist:
-    runs-on: ubuntu-latest
-    # 不需要 'permissions'，使用 PAT 进行认证
+# jobs:
+#   generate_and_update_gist:
+#     runs-on: ubuntu-latest
+#     # 不需要 'permissions'，使用 PAT 进行认证
 
-    steps:
-      - name: Checkout repository code
-        uses: actions/checkout@v4
+#     steps:
+#       - name: Checkout repository code
+#         uses: actions/checkout@v4
 
-      - name: Set up Node.js environment
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          # 移除缓存设置，因为通常没有 package-lock.json
-          # cache: 'npm'
+#       - name: Set up Node.js environment
+#         uses: actions/setup-node@v4
+#         with:
+#           node-version: '20'
+#           # 移除缓存设置，因为通常没有 package-lock.json
+#           # cache: 'npm'
 
-      - name: Install Node.js dependencies
-        run: npm install js-yaml
-        # 如果你添加了 package.json/lock, 改为: run: npm install
+#       - name: Install Node.js dependencies
+#         run: npm install js-yaml
+#         # 如果你添加了 package.json/lock, 改为: run: npm install
 
-      - name: Create temporary directory for data
-        run: mkdir -p temp_data
+#       - name: Create temporary directory for data
+#         run: mkdir -p temp_data
 
-      - name: Fetch latest proxy list from Secret URL
-        id: fetch_proxies
-        env:
-          # 从 Secrets 获取代理源 URL
-          PROXY_URL: ${{ secrets.PROXY_SOURCE_URL }}
-        run: |
-          echo "Fetching proxy list from configured URL..."
-          # 检查 PROXY_URL 是否为空
-          if [ -z "$PROXY_URL" ]; then
-            echo "Error: PROXY_SOURCE_URL secret is not set."
-            exit 1
-          fi
-          curl -f -L -S -s -o temp_data/proxies.yaml "$PROXY_URL"
-          # 检查下载是否成功且文件非空
-          if [ ! -s temp_data/proxies.yaml ]; then
-            echo "Warning: Downloaded proxy list (proxies.yaml) is empty or download failed. Proceeding, but generated config might be incomplete."
-            # 你可以在这里决定是否退出： exit 1
-          else
-            echo "Proxy list downloaded successfully."
-          fi
+#       - name: Fetch latest proxy list from Secret URL
+#         id: fetch_proxies
+#         env:
+#           # 从 Secrets 获取代理源 URL
+#           PROXY_URL: ${{ secrets.PROXY_SOURCE_URL }}
+#         run: |
+#           echo "Fetching proxy list from configured URL..."
+#           # 检查 PROXY_URL 是否为空
+#           if [ -z "$PROXY_URL" ]; then
+#             echo "Error: PROXY_SOURCE_URL secret is not set."
+#             exit 1
+#           fi
+#           curl -f -L -S -s -o temp_data/proxies.yaml "$PROXY_URL"
+#           # 检查下载是否成功且文件非空
+#           if [ ! -s temp_data/proxies.yaml ]; then
+#             echo "Warning: Downloaded proxy list (proxies.yaml) is empty or download failed. Proceeding, but generated config might be incomplete."
+#             # 你可以在这里决定是否退出： exit 1
+#           else
+#             echo "Proxy list downloaded successfully."
+#           fi
 
-      - name: Generate Clash configuration file
-        id: generate_config
-        run: |
-          echo "Running Node.js script to generate config..."
-          # 脚本读取下载的代理文件，输出到工作目录的 clash_config.yaml
-          node generate-clash-config.js temp_data/proxies.yaml clash_config.yaml
-          # 检查脚本是否成功生成了配置文件
-          if [ ! -f clash_config.yaml ]; then
-             echo "Error: clash_config.yaml was not created by the Node.js script."
-             exit 1
-          fi
-          echo "clash_config.yaml generated locally."
+#       - name: Generate Clash configuration file
+#         id: generate_config
+#         run: |
+#           echo "Running Node.js script to generate config..."
+#           # 脚本读取下载的代理文件，输出到工作目录的 clash_config.yaml
+#           node generate-clash-config.js temp_data/proxies.yaml clash_config.yaml
+#           # 检查脚本是否成功生成了配置文件
+#           if [ ! -f clash_config.yaml ]; then
+#              echo "Error: clash_config.yaml was not created by the Node.js script."
+#              exit 1
+#           fi
+#           echo "clash_config.yaml generated locally."
 
-      - name: Clone target Gist repository
-        env:
-          # 从 Secrets 获取 PAT 和 Gist ID
-          GIST_PAT: ${{ secrets.GIST_PAT }}
-          GIST_ID: ${{ secrets.TARGET_GIST_ID }}
-        run: |
-          echo "Cloning target Gist (ID: $GIST_ID)..."
-          # 检查 Secret 是否设置
-          if [ -z "$GIST_PAT" ] || [ -z "$GIST_ID" ]; then
-            echo "Error: GIST_PAT or TARGET_GIST_ID secret is not set."
-            exit 1
-          fi
-          # 使用 PAT 进行认证克隆
-          git clone "https://x-access-token:${GIST_PAT}@gist.github.com/${GIST_ID}.git" temp_gist
-          echo "Gist cloned into temp_gist directory."
+#       - name: Clone target Gist repository
+#         env:
+#           # 从 Secrets 获取 PAT 和 Gist ID
+#           GIST_PAT: ${{ secrets.GIST_PAT }}
+#           GIST_ID: ${{ secrets.TARGET_GIST_ID }}
+#         run: |
+#           echo "Cloning target Gist (ID: $GIST_ID)..."
+#           # 检查 Secret 是否设置
+#           if [ -z "$GIST_PAT" ] || [ -z "$GIST_ID" ]; then
+#             echo "Error: GIST_PAT or TARGET_GIST_ID secret is not set."
+#             exit 1
+#           fi
+#           # 使用 PAT 进行认证克隆
+#           git clone "https://x-access-token:${GIST_PAT}@gist.github.com/${GIST_ID}.git" temp_gist
+#           echo "Gist cloned into temp_gist directory."
 
-      - name: Update Gist file, commit if changed
-        env:
-          # **重要**: 定义 Gist 中的目标文件名
-          # 你可以硬编码在这里，或者也将其设为 Secret (如果文件名可能变化或敏感)
-          GIST_FILENAME: "clash_config.yaml" # <--- 确认或修改这个文件名!
-        run: |
-          echo "Preparing to update ${GIST_FILENAME} in Gist clone..."
-          if [ ! -f "clash_config.yaml" ]; then
-             echo "Error: Source file clash_config.yaml not found. Cannot update Gist."
-             exit 1
-          fi
-          if [ -z "$GIST_FILENAME" ]; then
-             echo "Error: GIST_FILENAME environment variable is not set."
-             exit 1
-          fi
+#       - name: Update Gist file, commit if changed
+#         env:
+#           # **重要**: 定义 Gist 中的目标文件名
+#           # 你可以硬编码在这里，或者也将其设为 Secret (如果文件名可能变化或敏感)
+#           GIST_FILENAME: "clash_config.yaml" # <--- 确认或修改这个文件名!
+#         run: |
+#           echo "Preparing to update ${GIST_FILENAME} in Gist clone..."
+#           if [ ! -f "clash_config.yaml" ]; then
+#              echo "Error: Source file clash_config.yaml not found. Cannot update Gist."
+#              exit 1
+#           fi
+#           if [ -z "$GIST_FILENAME" ]; then
+#              echo "Error: GIST_FILENAME environment variable is not set."
+#              exit 1
+#           fi
 
-          # 复制生成的文件到 Gist 目录
-          cp clash_config.yaml temp_gist/"${GIST_FILENAME}"
-          cd temp_gist
+#           # 复制生成的文件到 Gist 目录
+#           cp clash_config.yaml temp_gist/"${GIST_FILENAME}"
+#           cd temp_gist
 
-          echo "Configuring Git user..."
-          git config user.name "GitHub Actions Bot"
-          git config user.email "actions@github.com"
+#           echo "Configuring Git user..."
+#           git config user.name "GitHub Actions Bot"
+#           git config user.email "actions@github.com"
 
-          echo "Checking for changes in ${GIST_FILENAME}..."
-          # 检查是否有实际更改，避免空提交
-          if git diff --quiet HEAD -- "${GIST_FILENAME}"; then
-            echo "No changes detected in ${GIST_FILENAME}. Skipping commit and push."
-            # 设置一个输出变量，以便下一步可以跳过推送
-            echo "should_push=false" >> $GITHUB_OUTPUT
-          else
-            echo "Changes detected. Staging ${GIST_FILENAME}..."
-            git add "${GIST_FILENAME}"
-            echo "Committing changes..."
-            git commit -m "Update ${GIST_FILENAME} via GitHub Actions [skip ci]"
-            echo "Commit successful."
-            echo "should_push=true" >> $GITHUB_OUTPUT
-          fi
-        id: commit_changes # 给这一步设置 ID 以便引用 output
+#           echo "Checking for changes in ${GIST_FILENAME}..."
+#           # 检查是否有实际更改，避免空提交
+#           if git diff --quiet HEAD -- "${GIST_FILENAME}"; then
+#             echo "No changes detected in ${GIST_FILENAME}. Skipping commit and push."
+#             # 设置一个输出变量，以便下一步可以跳过推送
+#             echo "should_push=false" >> $GITHUB_OUTPUT
+#           else
+#             echo "Changes detected. Staging ${GIST_FILENAME}..."
+#             git add "${GIST_FILENAME}"
+#             echo "Committing changes..."
+#             git commit -m "Update ${GIST_FILENAME} via GitHub Actions [skip ci]"
+#             echo "Commit successful."
+#             echo "should_push=true" >> $GITHUB_OUTPUT
+#           fi
+#         id: commit_changes # 给这一步设置 ID 以便引用 output
 
-      - name: Push changes to Gist (if any)
-        # 仅当上一步检测到更改并成功 commit 时才运行
-        if: steps.commit_changes.outputs.should_push == 'true'
-        env:
-           # 再次从 Secrets 获取 PAT 和 Gist ID
-           GIST_PAT: ${{ secrets.GIST_PAT }}
-           GIST_ID: ${{ secrets.TARGET_GIST_ID }}
-        run: |
-           cd temp_gist
-           echo "Pushing changes to Gist..."
-           # 检查 Secret 是否设置 (再次检查以防万一)
-           if [ -z "$GIST_PAT" ] || [ -z "$GIST_ID" ]; then
-             echo "Error: GIST_PAT or TARGET_GIST_ID secret is not set for push step."
-             exit 1
-           fi
-           # 使用 PAT 推送。Gist 的默认分支通常是 'main' 或 'master'
-           # 如果 'main' 失败，尝试 'master'
-           git push "https://x-access-token:${GIST_PAT}@gist.github.com/${GIST_ID}.git" main || git push "https://x-access-token:${GIST_PAT}@gist.github.com/${GIST_ID}.git" master
-           echo "Changes pushed to Gist."
+#       - name: Push changes to Gist (if any)
+#         # 仅当上一步检测到更改并成功 commit 时才运行
+#         if: steps.commit_changes.outputs.should_push == 'true'
+#         env:
+#            # 再次从 Secrets 获取 PAT 和 Gist ID
+#            GIST_PAT: ${{ secrets.GIST_PAT }}
+#            GIST_ID: ${{ secrets.TARGET_GIST_ID }}
+#         run: |
+#            cd temp_gist
+#            echo "Pushing changes to Gist..."
+#            # 检查 Secret 是否设置 (再次检查以防万一)
+#            if [ -z "$GIST_PAT" ] || [ -z "$GIST_ID" ]; then
+#              echo "Error: GIST_PAT or TARGET_GIST_ID secret is not set for push step."
+#              exit 1
+#            fi
+#            # 使用 PAT 推送。Gist 的默认分支通常是 'main' 或 'master'
+#            # 如果 'main' 失败，尝试 'master'
+#            git push "https://x-access-token:${GIST_PAT}@gist.github.com/${GIST_ID}.git" main || git push "https://x-access-token:${GIST_PAT}@gist.github.com/${GIST_ID}.git" master
+#            echo "Changes pushed to Gist."
 
-      - name: Clean up temporary files and directories
-        # 总是运行清理步骤，无论前面是否成功
-        if: always()
-        run: |
-          echo "Cleaning up temporary data..."
-          rm -rf temp_data
-          rm -rf temp_gist # 清理克隆的 Gist 目录
-          rm -f clash_config.yaml # 清理工作目录中生成的配置文件 (可选)
-          echo "Cleanup finished."
+#       - name: Clean up temporary files and directories
+#         # 总是运行清理步骤，无论前面是否成功
+#         if: always()
+#         run: |
+#           echo "Cleaning up temporary data..."
+#           rm -rf temp_data
+#           rm -rf temp_gist # 清理克隆的 Gist 目录
+#           rm -f clash_config.yaml # 清理工作目录中生成的配置文件 (可选)
+#           echo "Cleanup finished."
